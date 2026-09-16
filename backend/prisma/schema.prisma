@@ -1,0 +1,440 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum RoleType {
+  SUPER_ADMIN
+  SALES_OPERATIONS
+  RSM
+  ZSM
+  ASM
+  TSM
+  ORDER_BOOKER
+  VIEWER
+}
+
+enum TargetStatus {
+  DRAFT
+  ASSIGNED
+  IN_PROGRESS
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  REVISION_REQUIRED
+  FINALIZED
+  EXPORTED
+  UPLOADED
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  REVISION_REQUESTED
+}
+
+enum JobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum PeriodStatus {
+  UPCOMING
+  ACTIVE
+  CLOSED
+}
+
+model User {
+  id            String         @id @default(uuid())
+  email         String         @unique
+  passwordHash  String         @map("password_hash")
+  name          String
+  employeeId    String?        @unique @map("employee_id")
+  roleId        String         @map("role_id")
+  status        String         @default("ACTIVE")
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
+
+  employee      Employee?      @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  role          Role           @relation(fields: [roleId], references: [id])
+  notifications Notification[]
+  auditLogs     AuditLog[]
+  submittedApprovals ApprovalRequest[] @relation("SubmittedBy")
+  reviewedApprovals  ApprovalRequest[] @relation("ReviewedBy")
+
+  @@map("users")
+}
+
+model Role {
+  id          String           @id @default(uuid())
+  name        RoleType         @unique
+  description String?
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+
+  users       User[]
+  employees   Employee[]
+  permissions RolePermission[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id          String           @id @default(uuid())
+  name        String
+  code        String           @unique
+  module      String
+  description String?
+  createdAt   DateTime         @default(now()) @map("created_at")
+
+  roles       RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  id           String     @id @default(uuid())
+  roleId       String     @map("role_id")
+  permissionId String     @map("permission_id")
+
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model Employee {
+  id               String      @id @default(uuid())
+  employeeCode     String      @unique @map("employee_code")
+  name             String
+  email            String      @unique
+  mobile           String?
+  roleId           String      @map("role_id")
+  parentEmployeeId String?     @map("parent_employee_id")
+  regionId         String?     @map("region_id")
+  territoryId      String?     @map("territory_id")
+  status           String      @default("ACTIVE")
+  createdAt        DateTime    @default(now()) @map("created_at")
+  updatedAt        DateTime    @updatedAt @map("updated_at")
+
+  role             Role        @relation(fields: [roleId], references: [id])
+  parent           Employee?   @relation("Hierarchy", fields: [parentEmployeeId], references: [id], onDelete: SetNull)
+  children         Employee[]  @relation("Hierarchy")
+  region           Region?     @relation(fields: [regionId], references: [id], onDelete: SetNull)
+  territory        Territory?  @relation(fields: [territoryId], references: [id], onDelete: SetNull)
+  user             User?
+  allocations      TargetAllocation[]
+
+  @@index([parentEmployeeId])
+  @@index([roleId])
+  @@index([regionId])
+  @@map("employees")
+}
+
+model Division {
+  id        String     @id @default(uuid())
+  code      String     @unique
+  name      String
+  status    String     @default("ACTIVE")
+  createdAt DateTime   @default(now()) @map("created_at")
+  updatedAt DateTime   @updatedAt @map("updated_at")
+
+  regions   Region[]
+  plans     TargetPlan[]
+
+  @@map("divisions")
+}
+
+model Region {
+  id         String      @id @default(uuid())
+  divisionId String      @map("division_id")
+  code       String      @unique
+  name       String
+  status     String      @default("ACTIVE")
+  createdAt  DateTime    @default(now()) @map("created_at")
+  updatedAt  DateTime    @updatedAt @map("updated_at")
+
+  division   Division    @relation(fields: [divisionId], references: [id], onDelete: Cascade)
+  territories Territory[]
+  employees  Employee[]
+  plans      TargetPlan[]
+
+  @@map("regions")
+}
+
+model Territory {
+  id        String     @id @default(uuid())
+  regionId  String     @map("region_id")
+  code      String     @unique
+  name      String
+  status    String     @default("ACTIVE")
+  createdAt DateTime   @default(now()) @map("created_at")
+  updatedAt DateTime   @updatedAt @map("updated_at")
+
+  region    Region     @relation(fields: [regionId], references: [id], onDelete: Cascade)
+  employees Employee[]
+
+  @@map("territories")
+}
+
+model Brand {
+  id          String             @id @default(uuid())
+  code        String             @unique
+  name        String
+  description String?
+  color       String?            @default("#3b82f6")
+  status      String             @default("ACTIVE")
+  createdAt   DateTime           @default(now()) @map("created_at")
+  updatedAt   DateTime           @updatedAt @map("updated_at")
+
+  categories  Category[]
+  allocations TargetAllocation[]
+
+  @@map("brands")
+}
+
+model Category {
+  id        String    @id @default(uuid())
+  brandId   String    @map("brand_id")
+  code      String    @unique
+  name      String
+  status    String    @default("ACTIVE")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  brand     Brand     @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  products  Product[]
+
+  @@map("categories")
+}
+
+model Product {
+  id          String             @id @default(uuid())
+  categoryId  String             @map("category_id")
+  code        String             @unique
+  name        String
+  sku         String             @unique
+  unit        String             @default("CTN")
+  status      String             @default("ACTIVE")
+  createdAt   DateTime           @default(now()) @map("created_at")
+  updatedAt   DateTime           @updatedAt @map("updated_at")
+
+  category    Category           @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  allocations TargetAllocation[]
+
+  @@map("products")
+}
+
+model TargetPeriod {
+  id        String       @id @default(uuid())
+  year      Int
+  month     Int
+  startDate DateTime     @map("start_date")
+  endDate   DateTime     @map("end_date")
+  status    PeriodStatus @default(ACTIVE)
+  createdAt DateTime     @default(now()) @map("created_at")
+  updatedAt DateTime     @updatedAt @map("updated_at")
+
+  plans     TargetPlan[]
+
+  @@unique([year, month])
+  @@map("target_periods")
+}
+
+model TargetPlan {
+  id             String             @id @default(uuid())
+  targetPeriodId String             @map("target_period_id")
+  divisionId     String?            @map("division_id")
+  regionId       String?            @map("region_id")
+  title          String
+  totalTarget    Decimal            @map("total_target") @db.Decimal(14, 2)
+  unit           String             @default("CTN")
+  status         TargetStatus       @default(DRAFT)
+  version        Int                @default(1)
+  createdBy      String?            @map("created_by")
+  createdAt      DateTime           @default(now()) @map("created_at")
+  updatedAt      DateTime           @updatedAt @map("updated_at")
+
+  period         TargetPeriod       @relation(fields: [targetPeriodId], references: [id], onDelete: Cascade)
+  division       Division?          @relation(fields: [divisionId], references: [id], onDelete: SetNull)
+  region         Region?            @relation(fields: [regionId], references: [id], onDelete: SetNull)
+  allocations    TargetAllocation[]
+  versions       TargetVersion[]
+  approvals      ApprovalRequest[]
+
+  @@index([targetPeriodId])
+  @@map("target_plans")
+}
+
+model TargetAllocation {
+  id                 String             @id @default(uuid())
+  targetPlanId       String             @map("target_plan_id")
+  parentAllocationId String?            @map("parent_allocation_id")
+  employeeId         String             @map("employee_id")
+  brandId            String?            @map("brand_id")
+  productId          String?            @map("product_id")
+  quantity           Decimal            @db.Decimal(14, 2)
+  unit               String             @default("CTN")
+  status             TargetStatus       @default(ASSIGNED)
+  version            Int                @default(1)
+  createdBy          String?            @map("created_by")
+  createdAt          DateTime           @default(now()) @map("created_at")
+  updatedAt          DateTime           @updatedAt @map("updated_at")
+
+  plan               TargetPlan         @relation(fields: [targetPlanId], references: [id], onDelete: Cascade)
+  parent             TargetAllocation?  @relation("AllocationHierarchy", fields: [parentAllocationId], references: [id], onDelete: Cascade)
+  children           TargetAllocation[] @relation("AllocationHierarchy")
+  employee           Employee           @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  brand              Brand?             @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  product            Product?           @relation(fields: [productId], references: [id], onDelete: SetNull)
+  approvals          ApprovalRequest[]
+
+  @@index([targetPlanId])
+  @@index([parentAllocationId])
+  @@index([employeeId])
+  @@index([brandId])
+  @@map("target_allocations")
+}
+
+model TargetVersion {
+  id            String     @id @default(uuid())
+  targetPlanId  String     @map("target_plan_id")
+  versionNumber Int        @map("version_number")
+  totalTarget   Decimal    @map("total_target") @db.Decimal(14, 2)
+  snapshotData  Json       @map("snapshot_data")
+  reason        String?
+  createdBy     String?    @map("created_by")
+  createdAt     DateTime   @default(now()) @map("created_at")
+
+  plan          TargetPlan @relation(fields: [targetPlanId], references: [id], onDelete: Cascade)
+
+  @@index([targetPlanId])
+  @@map("target_versions")
+}
+
+model ApprovalRequest {
+  id           String           @id @default(uuid())
+  targetPlanId String           @map("target_plan_id")
+  allocationId String?          @map("allocation_id")
+  submittedBy  String           @map("submitted_by")
+  submittedTo  String?          @map("submitted_to")
+  level        RoleType
+  status       ApprovalStatus   @default(PENDING)
+  comments     String?
+  submittedAt  DateTime         @default(now()) @map("submitted_at")
+  reviewedAt   DateTime?        @map("reviewed_at")
+
+  plan         TargetPlan       @relation(fields: [targetPlanId], references: [id], onDelete: Cascade)
+  allocation   TargetAllocation? @relation(fields: [allocationId], references: [id], onDelete: Cascade)
+  submitter    User             @relation("SubmittedBy", fields: [submittedBy], references: [id], onDelete: Cascade)
+  reviewer     User?            @relation("ReviewedBy", fields: [submittedTo], references: [id], onDelete: SetNull)
+
+  @@index([targetPlanId])
+  @@index([allocationId])
+  @@index([status])
+  @@map("approval_requests")
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  title     String
+  message   String
+  type      String   @default("INFO")
+  read      Boolean  @default(false)
+  link      String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("notifications")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String?  @map("user_id")
+  action     String
+  entityType String   @map("entity_type")
+  entityId   String?  @map("entity_id")
+  oldValues  Json?    @map("old_values")
+  newValues  Json?    @map("new_values")
+  ipAddress  String?  @map("ip_address")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model ImportJob {
+  id          String        @id @default(uuid())
+  type        String
+  filename    String
+  status      JobStatus     @default(PENDING)
+  totalRows   Int           @default(0) @map("total_rows")
+  successRows Int           @default(0) @map("success_rows")
+  errorRows   Int           @default(0) @map("error_rows")
+  createdBy   String?       @map("created_by")
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  errors      ImportError[]
+
+  @@map("import_jobs")
+}
+
+model ImportError {
+  id           String    @id @default(uuid())
+  importJobId  String    @map("import_job_id")
+  rowNumber    Int       @map("row_number")
+  columnName   String?   @map("column_name")
+  errorMessage String    @map("error_message")
+  rawData      Json?     @map("raw_data")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  job          ImportJob @relation(fields: [importJobId], references: [id], onDelete: Cascade)
+
+  @@index([importJobId])
+  @@map("import_errors")
+}
+
+model ExportJob {
+  id          String    @id @default(uuid())
+  type        String
+  status      JobStatus @default(PENDING)
+  filePath    String?   @map("file_path")
+  downloadUrl String?   @map("download_url")
+  createdBy   String?   @map("created_by")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  @@map("export_jobs")
+}
+
+model IntegrationLog {
+  id           String   @id @default(uuid())
+  systemName   String   @map("system_name")
+  action       String
+  status       String
+  payload      Json?
+  response     Json?
+  errorMessage String?  @map("error_message")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([systemName])
+  @@index([createdAt])
+  @@map("integration_logs")
+}

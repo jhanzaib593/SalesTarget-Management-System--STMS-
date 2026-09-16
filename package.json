@@ -1,0 +1,13 @@
+{
+  "name": "sales-target-management-system",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "npx concurrently -n \"BACKEND,FRONTEND\" -c \"blue,green\" \"npm --prefix backend run start:dev\" \"npm --prefix frontend run dev\"",
+    "start:backend": "npm --prefix backend run start:dev",
+    "start:frontend": "npm --prefix frontend run dev",
+    "prisma:push": "npm --prefix backend run prisma:db:push",
+    "prisma:seed": "npm --prefix backend run prisma:seed",
+    "prisma:migrate": "npm --prefix backend run prisma:migrate"
+  }
+}
